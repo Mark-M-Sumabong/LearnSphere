@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useMemo, useContext } from 'react';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
@@ -6,7 +7,7 @@ import { QuizView } from './components/QuizView';
 import { QuizResult } from './components/QuizResult';
 import { generateCurriculum, generateLessonContent, generateQuiz, generateAssessment, evaluateAssessment, generateStudyLink } from './services/geminiService';
 import * as storage from './services/storageService';
-import { Course, Lesson, Quiz, QuizResults, SkillLevel, SessionState, ActiveQuizState } from './types';
+import { Course, Lesson, Quiz, QuizResults, SkillLevel, SessionState, ActiveQuizState, AppState } from './types';
 import { Spinner } from './components/ui/Spinner';
 import { Login } from './components/Login';
 import { Leaderboard } from './components/Leaderboard';
@@ -200,17 +201,39 @@ const App: React.FC = () => {
 
   const startCourseGeneration = useCallback(async (topic: string, skillLevel: SkillLevel) => {
     setIsLoadingCurriculum(true);
+
+    if (!userContext?.currentUser) {
+        setError("You must be logged in to generate a course.");
+        setIsLoadingCurriculum(false);
+        return;
+    }
+    
     setShowAssessmentPrompt(false);
     setActiveAssessment(null);
     setActiveQuizState(null);
-    setUserSkillLevel(skillLevel);
     setError(null);
 
     try {
       const curriculum = await generateCurriculum(topic, skillLevel);
-      setCourse(curriculum);
-      if (curriculum.modules.length > 0 && curriculum.modules[0].lessons.length > 0) {
-        setSelectedLesson(curriculum.modules[0].lessons[0]);
+      
+      const initialState: AppState = {
+          course: curriculum,
+          unlockedModules: [0],
+          skillLevel: skillLevel
+      };
+      
+      // Await saving to get the course ID back
+      await storage.saveUserState(userContext.currentUser.id, initialState);
+      
+      // Set state with the complete course object, now including the ID
+      setCourse(initialState.course);
+      setUserSkillLevel(initialState.skillLevel);
+      setUnlockedModules(new Set(initialState.unlockedModules));
+      
+      if (initialState.course.modules.length > 0 && initialState.course.modules[0].lessons.length > 0) {
+        setSelectedLesson(initialState.course.modules[0].lessons[0]);
+      } else {
+        setSelectedLesson(null);
       }
     } catch (e) {
       console.error(e);
@@ -219,7 +242,7 @@ const App: React.FC = () => {
       setIsLoadingCurriculum(false);
       setTopicForCourseGeneration(null);
     }
-  }, []);
+  }, [userContext]);
 
   const handleGenerateCourseRequest = useCallback((topic: string) => {
     resetState(true);

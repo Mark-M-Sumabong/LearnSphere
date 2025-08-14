@@ -18,7 +18,7 @@ const createNewCourseViaRpc = async (course: Course): Promise<number | null> => 
     // alphabetically sorted, matching the signature of the corrected database function,
     // which prevents errors from the client library reordering them.
     const { data, error } = await supabase.rpc('create_course_and_get_id', {
-        p_course_data: course as Json,
+        p_course_data: course,
         p_course_title: course.title,
     });
 
@@ -46,15 +46,15 @@ export const saveUserState = async (userId: string, state: AppState): Promise<vo
             .from('courses')
             .select('id')
             .eq('title', state.course.title)
-            .single();
+            .maybeSingle();
 
-        if (findError && findError.code !== 'PGRST116') { // PGRST116: 'exact-one-row-not-found'
+        if (findError) {
             console.error("Error finding course:", findError);
             return;
         }
 
         if (existingCourse) {
-            courseId = (existingCourse as any).id;
+            courseId = existingCourse.id;
             state.course.id = courseId;
         } else {
             // Course does not exist, create it using the secure RPC function.
@@ -115,7 +115,8 @@ export const loadUserState = async (userId: string): Promise<AppState | null> =>
         return null;
     }
     
-    const coursesData = (data as any).courses;
+    const anyData = data as any;
+    const coursesData = anyData.courses;
 
     if (!coursesData || Array.isArray(coursesData)) {
         console.error("User progress found, but the associated course is missing or invalid.");
@@ -131,9 +132,9 @@ export const loadUserState = async (userId: string): Promise<AppState | null> =>
     }
 
     return {
-        course: { ...(courseData), id: (data as any).course_id },
-        unlockedModules: (data as any).unlocked_modules as number[],
-        skillLevel: (data as any).skill_level as SkillLevel | null
+        course: { ...(courseData), id: anyData.course_id },
+        unlockedModules: anyData.unlocked_modules as number[],
+        skillLevel: anyData.skill_level as SkillLevel | null
     };
 };
 
@@ -157,11 +158,14 @@ export const getLeaderboard = async (courseId: number): Promise<LeaderboardEntry
         return [];
     }
 
-    return data.map(entry => ({
-        username: (entry as any).profiles?.username || 'Anonymous',
-        score: (entry as any).score,
-        timestamp: new Date((entry as any).timestamp).getTime()
-    }));
+    return data.map(entry => {
+        const anyEntry = entry as any;
+        return {
+            username: anyEntry.profiles?.username || 'Anonymous',
+            score: anyEntry.score,
+            timestamp: new Date(anyEntry.timestamp).getTime()
+        }
+    });
 };
 
 export const addLeaderboardEntry = async (courseId: number, userId: string, score: number): Promise<void> => {
@@ -227,13 +231,16 @@ export const getAllAssessmentResults = async (): Promise<AssessmentResult[]> => 
         return [];
     }
     
-    return data.map(result => ({
-        username: (result as any).profiles?.username || 'Anonymous',
-        topic: (result as any).topic,
-        score: (result as any).score,
-        skillLevel: (result as any).skill_level as SkillLevel,
-        timestamp: new Date((result as any).created_at).getTime()
-    }));
+    return data.map(result => {
+        const anyResult = result as any;
+        return {
+            username: anyResult.profiles?.username || 'Anonymous',
+            topic: anyResult.topic,
+            score: anyResult.score,
+            skillLevel: anyResult.skill_level as SkillLevel,
+            timestamp: new Date(anyResult.created_at).getTime()
+        }
+    });
 };
 
 
@@ -250,19 +257,22 @@ export const getUserAssessmentResults = async (userId: string): Promise<Omit<Ass
         return [];
     }
     
-    return data.map(result => ({
-        topic: (result as any).topic,
-        score: (result as any).score,
-        skillLevel: (result as any).skill_level as SkillLevel,
-        timestamp: new Date((result as any).created_at).getTime()
-    }));
+    return (data || []).map(result => {
+        const anyResult = result as any;
+        return {
+            topic: anyResult.topic,
+            score: anyResult.score,
+            skillLevel: anyResult.skill_level as SkillLevel,
+            timestamp: new Date(anyResult.created_at).getTime()
+        }
+    });
 };
 
 export const getUserQuizAttempts = async (userId: string): Promise<QuizAttempt[]> => {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
         .from('quiz_attempts')
-        .select('id, module_title, score, passed, attempted_at, courses(title)')
+        .select('id, module_title, score, passed, attempted_at, courses!quiz_attempts_course_id_fkey(title)')
         .eq('user_id', userId)
         .order('attempted_at', { ascending: false });
     
@@ -324,7 +334,8 @@ export const importCourseToDb = async (course: Course): Promise<Course | null> =
         return null;
     }
     
-    return { ...((data as any).course_data as Course), id: (data as any).id };
+    const anyData = data as any;
+    return { ...(anyData.course_data as Course), id: anyData.id };
 }
 
 export const getAllCoursesForAdmin = async (): Promise<{ title: string; id: number }[]> => {

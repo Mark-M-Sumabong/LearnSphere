@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { Quiz, ActiveQuizState } from '../types';
 import { ArrowRightIcon } from './icons/ArrowRightIcon';
@@ -12,7 +13,7 @@ interface QuizViewProps {
   onSubmit: (answers: number[]) => void;
   onSurrender?: () => void;
   quizState: ActiveQuizState | null;
-  onQuizStateChange: (state: ActiveQuizState | null) => void;
+  onQuizStateChange: (value: React.SetStateAction<ActiveQuizState | null>) => void;
 }
 
 const ASSESSMENT_DURATION_SECONDS = 20 * 60; // 20 minutes
@@ -24,10 +25,13 @@ export const QuizView: React.FC<QuizViewProps> = ({ quiz, onSubmit, onSurrender,
 
   const isAssessment = quiz.title.startsWith('Skill Assessment:');
 
+  // --- HOOKS ---
+  // All hooks must be called unconditionally at the top of the component.
+
+  // Effect to initialize state when the component mounts or quiz changes.
   useEffect(() => {
-    // If there's no quiz state, initialize it.
-    // This happens when a quiz is first started.
-    if (!quizState) {
+    // Only initialize if state is not already set and we have questions.
+    if (!quizState && quiz.questions.length > 0) {
       onQuizStateChange({
         userAnswers: Array(quiz.questions.length).fill(-1),
         currentQuestionIndex: 0,
@@ -36,28 +40,74 @@ export const QuizView: React.FC<QuizViewProps> = ({ quiz, onSubmit, onSurrender,
     }
   }, [quiz, quizState, onQuizStateChange, isAssessment]);
   
-  // Timer countdown effect for assessments
+  // Timer countdown effect for assessments.
   useEffect(() => {
-    if (!isAssessment || !quizState || quizState.timeLeft === null) return;
-
-    if (quizState.timeLeft <= 0) {
-      onSubmit(quizState.userAnswers);
+    // This effect should only run for assessments.
+    if (!isAssessment) {
       return;
     }
 
     const timerId = setInterval(() => {
-      onQuizStateChange({ ...quizState, timeLeft: quizState.timeLeft! - 1 });
+      // Use functional updates to avoid stale state and needing quizState in the dependency array.
+      onQuizStateChange(prevState => {
+        if (!prevState || prevState.timeLeft === null) {
+          clearInterval(timerId);
+          return prevState;
+        }
+
+        if (prevState.timeLeft <= 1) {
+          clearInterval(timerId);
+          onSubmit(prevState.userAnswers);
+          return { ...prevState, timeLeft: 0 };
+        }
+        
+        return { ...prevState, timeLeft: prevState.timeLeft - 1 };
+      });
     }, 1000);
 
     return () => clearInterval(timerId);
-  }, [isAssessment, quizState, onQuizStateChange, onSubmit]);
+  }, [isAssessment, onSubmit, onQuizStateChange]);
 
-  if (!quizState) {
-    // Render a spinner while the initial state is being set
-    return <div className="flex justify-center items-center h-96"><Spinner className="w-12 h-12" /></div>;
+  const handleGetHint = useCallback(async () => {
+    if (!quizState) return;
+    const currentQuestion = quiz.questions[quizState.currentQuestionIndex];
+    if (!currentQuestion) return;
+
+    setIsHintLoading(true);
+    setHint(null);
+    try {
+      const generatedHint = await generateHint(quiz.title, currentQuestion.questionText, currentQuestion.options);
+      setHint(generatedHint);
+      setRevealedHints(prev => new Set(prev).add(quizState.currentQuestionIndex));
+    } catch (error) {
+      console.error("Failed to get hint:", error);
+      setHint("Sorry, I couldn't generate a hint right now. Please try again.");
+    } finally {
+      setIsHintLoading(false);
+    }
+  }, [quiz.title, quiz.questions, quizState]);
+
+  // --- EARLY RETURNS ---
+  // Early returns can happen only after all hooks are called.
+
+  if (!quiz.questions || quiz.questions.length === 0) {
+    return (
+      <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 md:p-8 text-center">
+        <h2 className="text-xl font-bold text-red-400">Quiz Error</h2>
+        <p className="text-gray-300 mt-2">This quiz could not be loaded because it has no questions.</p>
+      </div>
+    );
   }
 
+  if (!quizState) {
+    // Render a spinner while the initial state is being set by the useEffect.
+    return <div className="flex justify-center items-center h-96"><Spinner className="w-12 h-12" /></div>;
+  }
+  
+  // --- RENDER LOGIC ---
+
   const { userAnswers, currentQuestionIndex, timeLeft } = quizState;
+  const currentQuestion = quiz.questions[currentQuestionIndex];
 
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
@@ -66,16 +116,22 @@ export const QuizView: React.FC<QuizViewProps> = ({ quiz, onSubmit, onSurrender,
   };
 
   const handleSelectOption = (optionIndex: number) => {
-    const newAnswers = [...userAnswers];
-    newAnswers[currentQuestionIndex] = optionIndex;
-    onQuizStateChange({ ...quizState, userAnswers: newAnswers });
+    onQuizStateChange(prevState => {
+        if (!prevState) return null;
+        const newAnswers = [...prevState.userAnswers];
+        newAnswers[prevState.currentQuestionIndex] = optionIndex;
+        return { ...prevState, userAnswers: newAnswers };
+    });
   };
   
   const handleNext = () => {
-    if (currentQuestionIndex < quiz.questions.length - 1) {
-      onQuizStateChange({ ...quizState, currentQuestionIndex: currentQuestionIndex + 1 });
-      setHint(null);
-    }
+    onQuizStateChange(prevState => {
+        if (!prevState || prevState.currentQuestionIndex >= quiz.questions.length - 1) {
+            return prevState;
+        }
+        return { ...prevState, currentQuestionIndex: prevState.currentQuestionIndex + 1 };
+    });
+    setHint(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -88,28 +144,10 @@ export const QuizView: React.FC<QuizViewProps> = ({ quiz, onSubmit, onSurrender,
     onSurrender?.();
   }
   
-  const currentQuestion = quiz.questions[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex === quiz.questions.length - 1;
 
-  const handleGetHint = useCallback(async () => {
-    if (!currentQuestion) return;
-
-    setIsHintLoading(true);
-    setHint(null);
-    try {
-      const generatedHint = await generateHint(quiz.title, currentQuestion.questionText, currentQuestion.options);
-      setHint(generatedHint);
-      setRevealedHints(prev => new Set(prev).add(currentQuestionIndex));
-    } catch (error) {
-      console.error("Failed to get hint:", error);
-      setHint("Sorry, I couldn't generate a hint right now. Please try again.");
-    } finally {
-      setIsHintLoading(false);
-    }
-  }, [currentQuestion, currentQuestionIndex, quiz.title]);
-
   return (
-    <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 md:p-8">
+    <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 md:p-8 animate-fade-in">
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-2 gap-2">
             <h2 className="text-2xl font-bold text-indigo-300">{quiz.title}</h2>

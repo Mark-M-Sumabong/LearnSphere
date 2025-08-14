@@ -35,7 +35,7 @@ export const Login: React.FC = () => {
         const supabase = getSupabaseClient();
         
         if (isLoginView) {
-            // --- Handle Login (v2 API) ---
+            // --- Handle Login (v2 syntax) ---
             const { error: signInError } = await supabase.auth.signInWithPassword({
                 email,
                 password,
@@ -46,18 +46,16 @@ export const Login: React.FC = () => {
             }
             // onAuthStateChange in UserContext will handle success
         } else {
-            // --- Handle Sign Up (v2 API) ---
-            const signUpData = {
-                username: trimmedUsername,
-                // Assign 'admin' role if username is 'admin', otherwise 'user'
-                role: trimmedUsername.toLowerCase() === 'admin' ? 'admin' : 'user'
-            };
-
+            // --- Handle Sign Up (v2 syntax) ---
             const { error: signUpError } = await supabase.auth.signUp({
                 email,
                 password,
                 options: {
-                    data: signUpData
+                    data: {
+                        username: trimmedUsername,
+                        // Assign 'admin' role if username is 'admin', otherwise 'user'
+                        role: trimmedUsername.toLowerCase() === 'admin' ? 'admin' : 'user'
+                    }
                 }
             });
 

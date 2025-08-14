@@ -2,13 +2,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { SkillLevel } from '../types';
 
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[];
+export type Json = any;
 
 export type Database = {
   public: {
