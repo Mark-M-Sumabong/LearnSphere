@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { User, Profile } from '../types';
 import { getSupabaseClient } from '../services/supabaseClient';
-import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
+import type { Session, User as SupabaseUser, AuthChangeEvent } from '@supabase/supabase-js';
 
 interface UserContextType {
   currentUser: User | null;
@@ -48,7 +48,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             };
         };
     
-        // Check for an active session on initial load using the v2 API.
+        // Perform the initial session check to establish the user's state.
         const { data: { session: initialSession } } = await supabase.auth.getSession();
         const initialUser = await fetchUserAndProfile(initialSession?.user || null);
         setCurrentUser(initialUser);
@@ -58,7 +58,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         
         // Listen for subsequent auth state changes (login, logout, token refresh).
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
-          async (_event, session) => {
+          async (_event: AuthChangeEvent, session: Session | null) => {
             const user = await fetchUserAndProfile(session?.user || null);
             setCurrentUser(user);
           }
