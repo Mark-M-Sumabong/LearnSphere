@@ -1,0 +1,48 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-R" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LearnSphere AI - Your Personal AI Tutor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.1.1/",
+    "react": "https://esm.sh/react@^19.1.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.1/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.13.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.44.4"
+  }
+}
+</script>
+<style>
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-fade-in {
+    animation: fade-in 0.3s ease-out forwards;
+  }
+</style>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-gray-900 text-white">
+    <div id="root"></div>
+    <script>
+      // In a real production environment, these would be set as actual environment variables.
+      // For this sandboxed environment, we are defining them on the window.
+      window.process = {
+        env: {
+          'SUPABASE_URL': 'https://qefhgvxopzagyabpuerj.supabase.co',
+          'SUPABASE_ANON_KEY': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlZmhndnhvcHphZ3lhYnB1ZXJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ4OTMwNjQsImV4cCI6MjA3MDQ2OTA2NH0.C8Hv2a1mrP7wJ3qtbGg1STwvkHQw1WKIq1SORTM9iAI',
+          // IMPORTANT: You must replace this placeholder with your actual Google Gemini API key.
+          'API_KEY': 'YOUR_GEMINI_API_KEY_HERE'
+        }
+      };
+    </script>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

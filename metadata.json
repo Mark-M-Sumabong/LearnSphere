@@ -1,0 +1,6 @@
+{
+  "name": "LearnSphere AI",
+  "description": "An AI-powered learning platform that generates personalized course curriculums and lesson content on any topic, similar to Udemy but driven by Agentic AI.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
