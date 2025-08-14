@@ -1,10 +1,14 @@
 
-
-
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { SkillLevel } from '../types';
 
-export type Json = any;
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
 
 export type Database = {
   public: {
@@ -243,6 +247,12 @@ export const getSupabaseClient = (): SupabaseClient<Database> => {
     throw new Error("Supabase URL and Anon Key must be provided in environment variables.");
   }
 
-  supabaseInstance = createClient<Database>(supabaseUrl, supabaseAnonKey);
+  supabaseInstance = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+    auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true
+    }
+  });
   return supabaseInstance;
 };
