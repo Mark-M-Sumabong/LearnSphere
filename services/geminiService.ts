@@ -298,15 +298,14 @@ export const askTutor = async (courseTitle: string, lessonTitle: string, lessonC
 
 export const generateStudyLink = async (courseTitle: string, moduleTitle: string): Promise<string> => {
     const ai = getAiClient();
-    const systemInstruction = "You are a helpful study assistant. Your goal is to find a single, high-quality, and relevant online article or resource for a student who failed a quiz on a specific topic. Respond with ONLY the URL. Do not add any other text, explanation, or markdown.";
+    const prompt = `As a helpful study assistant, your goal is to find a single, high-quality, and relevant online article or resource for a student who failed a quiz on a specific topic. Respond with ONLY the URL. Do not add any other text, explanation, or markdown.
 
-    const prompt = `Find the best single online article or tutorial for a beginner learning about "${moduleTitle}" in a course on "${courseTitle}". I need just the URL.`;
+Find the best single online article or tutorial for a beginner learning about "${moduleTitle}" in a course on "${courseTitle}".`;
 
     const response = await ai.models.generateContent({
        model: "gemini-2.5-flash",
        contents: prompt,
        config: {
-         systemInstruction,
          tools: [{googleSearch: {}}],
        },
     });

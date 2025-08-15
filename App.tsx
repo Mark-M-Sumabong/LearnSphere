@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback, useEffect, useMemo, useContext } from 'react';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
@@ -18,6 +19,7 @@ import { AssessmentPrompt } from './components/AssessmentPrompt';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ConfigurationErrorScreen } from './components/ConfigurationErrorScreen';
 import { ContinueCourse } from './components/ContinueCourse';
+import { AssessmentResultModal } from './components/AssessmentResultModal';
 
 const QUIZ_PASS_PERCENTAGE = 0.6; // 60%
 
@@ -41,6 +43,7 @@ const App: React.FC = () => {
 
   // Quiz & Progress State
   const [unlockedModules, setUnlockedModules] = useState<Set<number>>(new Set([0]));
+  const [completedLessons, setCompletedLessons] = useState<Set<string>>(new Set());
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
   const [quizResults, setQuizResults] = useState<QuizResults | null>(null);
   const [currentModuleIndexForQuiz, setCurrentModuleIndexForQuiz] = useState<number | null>(null);
@@ -53,6 +56,7 @@ const App: React.FC = () => {
   const [isGeneratingAssessment, setIsGeneratingAssessment] = useState<boolean>(false);
   const [isEvaluatingAssessment, setIsEvaluatingAssessment] = useState<boolean>(false);
   const [userSkillLevel, setUserSkillLevel] = useState<SkillLevel | null>(null);
+  const [assessmentResultToShow, setAssessmentResultToShow] = useState<{ score: number; skillLevel: SkillLevel } | null>(null);
 
   // Admin State
   const [isAdmin, setIsAdmin] = useState(false);
@@ -63,6 +67,7 @@ const App: React.FC = () => {
       setCourse(null);
       setUserSkillLevel(null);
       setUnlockedModules(new Set([0]));
+      setCompletedLessons(new Set());
     }
     setSelectedLesson(null);
     setLessonContent('');
@@ -75,6 +80,7 @@ const App: React.FC = () => {
     setActiveAssessment(null);
     setShowContinuePrompt(false);
     setActiveQuizState(null);
+    setAssessmentResultToShow(null);
     // Clear session storage for the current user to ensure a fresh start
     if (userContext?.currentUser?.id) {
       localStorage.removeItem(`learnsphere-session-${userContext.currentUser.id}`);
@@ -102,6 +108,7 @@ const App: React.FC = () => {
             
             setCourse(sessionData.course);
             setUnlockedModules(new Set(sessionData.unlockedModules || [0]));
+            setCompletedLessons(new Set(sessionData.completedLessons || []));
             setUserSkillLevel(sessionData.userSkillLevel || null);
             setActiveQuiz(sessionData.activeQuiz || null);
             setQuizResults(sessionData.quizResults || null);
@@ -124,6 +131,7 @@ const App: React.FC = () => {
               setCourse(savedState.course);
               const modules = Array.isArray(savedState.unlockedModules) && savedState.unlockedModules.length > 0 ? savedState.unlockedModules : [0];
               setUnlockedModules(new Set(modules));
+              setCompletedLessons(new Set(savedState.completedLessons || []));
               setUserSkillLevel(savedState.skillLevel || null);
               setShowContinuePrompt(true);
               setSelectedLesson(null);
@@ -157,10 +165,11 @@ const App: React.FC = () => {
         storage.saveUserState(userContext.currentUser.id, {
             course,
             unlockedModules: Array.from(unlockedModules),
+            completedLessons: Array.from(completedLessons),
             skillLevel: userSkillLevel,
         });
     }
-  }, [course, unlockedModules, userContext?.currentUser, userContext?.configError, userSkillLevel, isAppLoading]);
+  }, [course, unlockedModules, completedLessons, userContext?.currentUser, userContext?.configError, userSkillLevel, isAppLoading]);
 
   // Save current session state to localStorage on change for persistence across refreshes
   useEffect(() => {
@@ -169,6 +178,7 @@ const App: React.FC = () => {
             course,
             selectedLessonTitle: selectedLesson?.title || null,
             unlockedModules: Array.from(unlockedModules),
+            completedLessons: Array.from(completedLessons),
             userSkillLevel,
             activeQuiz,
             quizResults,
@@ -180,7 +190,8 @@ const App: React.FC = () => {
   }, [
     course, 
     selectedLesson, 
-    unlockedModules, 
+    unlockedModules,
+    completedLessons,
     userSkillLevel, 
     activeQuiz, 
     quizResults, 
@@ -219,7 +230,8 @@ const App: React.FC = () => {
       const initialState: AppState = {
           course: curriculum,
           unlockedModules: [0],
-          skillLevel: skillLevel
+          completedLessons: [],
+          skillLevel: skillLevel,
       };
       
       // Await saving to get the course ID back
@@ -229,6 +241,7 @@ const App: React.FC = () => {
       setCourse(initialState.course);
       setUserSkillLevel(initialState.skillLevel);
       setUnlockedModules(new Set(initialState.unlockedModules));
+      setCompletedLessons(new Set(initialState.completedLessons));
       
       if (initialState.course.modules.length > 0 && initialState.course.modules[0].lessons.length > 0) {
         setSelectedLesson(initialState.course.modules[0].lessons[0]);
@@ -298,7 +311,9 @@ const App: React.FC = () => {
         skillLevel,
       });
 
-      await startCourseGeneration(topicForCourseGeneration, skillLevel);
+      setUserSkillLevel(skillLevel);
+      setAssessmentResultToShow({ score, skillLevel });
+
     } catch (e) {
       console.error("Failed to evaluate assessment or generate course:", e);
       setError("There was an error personalizing your course. Starting a beginner course instead.");
@@ -315,11 +330,20 @@ const App: React.FC = () => {
 
 
   const handleSelectLesson = useCallback((lesson: Lesson) => {
+    // Automatically mark the previously selected lesson as complete
+    if (selectedLesson && selectedLesson.title !== lesson.title) {
+        setCompletedLessons(prev => {
+            const newSet = new Set(prev);
+            newSet.add(selectedLesson.title);
+            return newSet;
+        });
+    }
+
     setSelectedLesson(lesson);
     setQuizResults(null);
     setActiveQuiz(null);
     setActiveQuizState(null);
-  }, []);
+  }, [selectedLesson]);
 
   useEffect(() => {
     const fetchLessonContent = async () => {
@@ -363,6 +387,10 @@ const App: React.FC = () => {
   const handleStartQuiz = useCallback(async () => {
     if (currentModuleIndex === null || !course) return;
     
+    // Mark all lessons in the current module as complete before starting quiz
+    const lessonsToComplete = course.modules[currentModuleIndex].lessons.map(l => l.title);
+    setCompletedLessons(prev => new Set([...prev, ...lessonsToComplete]));
+
     setIsGeneratingQuiz(true);
     setError(null);
     setLessonContent(''); // Hide lesson content
@@ -415,7 +443,7 @@ const App: React.FC = () => {
 
     if (results.isPassed) {
         setUnlockedModules(prev => new Set(prev).add(currentModuleIndexForQuiz + 1));
-        await storage.addLeaderboardEntry(course.id, userContext.currentUser.id, results.score);
+        await storage.addLeaderboardEntry(course.id, userContext.currentUser.id);
     }
   }, [activeQuiz, currentModuleIndexForQuiz, course, userContext?.currentUser]);
   
@@ -428,6 +456,20 @@ const App: React.FC = () => {
       if (course.modules[nextModuleIndex]?.lessons[0]) {
         setSelectedLesson(course.modules[nextModuleIndex].lessons[0]);
       }
+    }
+  }, [course, currentModuleIndexForQuiz]);
+
+  const handleGoBackToLessons = useCallback(() => {
+    setActiveQuiz(null);
+    setQuizResults(null);
+    setActiveQuizState(null);
+    if (course && currentModuleIndexForQuiz !== null) {
+        const currentModule = course.modules[currentModuleIndexForQuiz];
+        if (currentModule && currentModule.lessons.length > 0) {
+            // Select the first lesson of the module to allow review from the start
+            const firstLesson = currentModule.lessons[0];
+            setSelectedLesson(firstLesson);
+        }
     }
   }, [course, currentModuleIndexForQuiz]);
   
@@ -446,7 +488,7 @@ const App: React.FC = () => {
 
   const handleStartNew = useCallback(() => {
     resetState(true);
-  }, [userContext]);
+  }, []);
 
   const handleRetakeQuiz = useCallback(() => {
     if (!activeQuiz) return;
@@ -543,6 +585,18 @@ const App: React.FC = () => {
         return <div className="flex flex-col items-center justify-center bg-gray-800/50 border border-gray-700 rounded-lg p-8 h-96"><Spinner className="w-12 h-12" /><p className="mt-4 text-lg text-gray-300">Evaluating your skill level...</p></div>;
     }
 
+    if (assessmentResultToShow && topicForCourseGeneration) {
+        return <AssessmentResultModal 
+            score={assessmentResultToShow.score}
+            skillLevel={assessmentResultToShow.skillLevel}
+            topic={topicForCourseGeneration}
+            onStartCourse={() => {
+                setAssessmentResultToShow(null);
+                startCourseGeneration(topicForCourseGeneration, assessmentResultToShow.skillLevel);
+            }}
+        />
+    }
+
     if (activeAssessment) { // This is the skill assessment quiz
         return <QuizView 
             quiz={activeAssessment} 
@@ -554,7 +608,7 @@ const App: React.FC = () => {
     }
 
     if (isLoadingCurriculum) {
-      return <CourseDisplay isLoadingCurriculum={true} course={null} selectedLesson={null} lessonContent="" isLoadingLesson={false} error={null} onSelectLesson={() => {}} unlockedModules={unlockedModules} isGeneratingQuiz={false} onStartQuiz={()=>{}} shouldShowStartQuiz={false} />;
+      return <CourseDisplay isLoadingCurriculum={true} course={null} selectedLesson={null} lessonContent="" isLoadingLesson={false} error={null} onSelectLesson={() => {}} unlockedModules={unlockedModules} completedLessons={completedLessons} isGeneratingQuiz={false} onStartQuiz={()=>{}} shouldShowStartQuiz={false} />;
     }
     if (isGeneratingQuiz) {
       return <div className="flex flex-col items-center justify-center bg-gray-800/50 border border-gray-700 rounded-lg p-8 h-96"><Spinner className="w-12 h-12" /><p className="mt-4 text-lg text-gray-300">Generating your quiz...</p></div>;
@@ -573,11 +627,12 @@ const App: React.FC = () => {
         results={quizResults} 
         onRetake={handleRetakeQuiz} 
         onContinue={handleContinue}
+        onGoBack={handleGoBackToLessons}
         courseTitle={course!.title}
       />;
     }
     if (course) {
-      return <CourseDisplay course={course} selectedLesson={selectedLesson} lessonContent={lessonContent} isLoadingCurriculum={isLoadingCurriculum} isLoadingLesson={isLoadingLesson} error={error} onSelectLesson={handleSelectLesson} unlockedModules={unlockedModules} onStartQuiz={handleStartQuiz} shouldShowStartQuiz={shouldShowStartQuiz} isGeneratingQuiz={isGeneratingQuiz} />;
+      return <CourseDisplay course={course} selectedLesson={selectedLesson} lessonContent={lessonContent} isLoadingCurriculum={isLoadingCurriculum} isLoadingLesson={isLoadingLesson} error={error} onSelectLesson={handleSelectLesson} unlockedModules={unlockedModules} completedLessons={completedLessons} onStartQuiz={handleStartQuiz} shouldShowStartQuiz={shouldShowStartQuiz} isGeneratingQuiz={isGeneratingQuiz} />;
     }
     return <Hero onGenerate={handleGenerateCourseRequest} />;
   }

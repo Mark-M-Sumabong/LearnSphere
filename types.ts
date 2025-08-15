@@ -82,6 +82,7 @@ export interface QuizAttempt {
 export interface AppState {
     course: Course | null;
     unlockedModules: number[];
+    completedLessons: string[];
     skillLevel: SkillLevel | null;
 }
 
@@ -96,6 +97,7 @@ export interface SessionState {
     course: Course | null;
     selectedLessonTitle: string | null;
     unlockedModules: number[];
+    completedLessons: string[];
     userSkillLevel: SkillLevel | null;
     activeQuiz: Quiz | null;
     quizResults: QuizResults | null;

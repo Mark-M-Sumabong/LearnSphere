@@ -27,7 +27,7 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
             const { data: profile, error } = await supabase
                 .from('profiles')
-                .select('username, role, updated_at') // Explicitly select fields to match Profile type
+                .select('*') // Fetch all columns to be more robust against RLS policies
                 .eq('id', supabaseUser.id)
                 .maybeSingle(); // Use maybeSingle() to prevent error if profile is not yet created
             
@@ -79,21 +79,28 @@ export const UserProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const logout = async () => {
+    // Capture user ID before any async operations or state changes
+    const userId = currentUser?.id;
+
     try {
-        const supabase = getSupabaseClient();
-        // Clear session state from localStorage before signing out
-        if (currentUser?.id) {
-            localStorage.removeItem(`learnsphere-session-${currentUser.id}`);
-        }
-        await supabase.auth.signOut();
-        setCurrentUser(null);
+      const supabase = getSupabaseClient();
+
+      // Sign out from Supabase first
+      const { error } = await supabase.auth.signOut();
+
+      if (error) {
+        // We should still try to log the user out of the UI
+        console.error("Error signing out from Supabase:", error);
+      }
     } catch (e) {
-        console.error("Could not log out due to configuration error:", e);
-        // If config is broken, we can at least clear the local state
-        if (currentUser?.id) {
-            localStorage.removeItem(`learnsphere-session-${currentUser.id}`);
-        }
-        setCurrentUser(null);
+      // This would catch errors from getSupabaseClient()
+      console.error("Could not log out due to configuration error:", e);
+    } finally {
+      // This block will always run, ensuring the UI is updated regardless of signOut success
+      if (userId) {
+        localStorage.removeItem(`learnsphere-session-${userId}`);
+      }
+      setCurrentUser(null);
     }
   };
 

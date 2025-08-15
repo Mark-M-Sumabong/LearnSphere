@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { Quiz, QuizResults } from '../types';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
@@ -9,16 +10,18 @@ import { Spinner } from './ui/Spinner';
 import { LinkIcon } from './icons/LinkIcon';
 import { ExternalLinkIcon } from './icons/ExternalLinkIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
+import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 
 interface QuizResultProps {
   quiz: Quiz;
   results: QuizResults;
   onRetake: () => void;
   onContinue: () => void;
+  onGoBack: () => void;
   courseTitle: string;
 }
 
-export const QuizResult: React.FC<QuizResultProps> = ({ quiz, results, onRetake, onContinue, courseTitle }) => {
+export const QuizResult: React.FC<QuizResultProps> = ({ quiz, results, onRetake, onContinue, onGoBack, courseTitle }) => {
   const scoreColor = results.isPassed ? 'text-green-400' : 'text-red-400';
   
   const [studyLink, setStudyLink] = useState<string | null>(null);
@@ -82,15 +85,21 @@ export const QuizResult: React.FC<QuizResultProps> = ({ quiz, results, onRetake,
       </div>
 
       <div className="flex flex-col sm:flex-row justify-center gap-4">
-        {!results.isPassed && (
+        <button
+          onClick={onGoBack}
+          className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 border border-gray-600 text-base font-medium rounded-md text-gray-300 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-gray-500 transition duration-200"
+        >
+          <ArrowLeftIcon className="w-5 h-5" />
+          Back to Module
+        </button>
+        {!results.isPassed ? (
           <button
             onClick={onRetake}
             className="w-full sm:w-auto flex items-center justify-center px-6 py-3 border border-indigo-500 text-base font-medium rounded-md text-indigo-300 hover:bg-indigo-900/50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-indigo-500 transition duration-200"
           >
             Retake Quiz
           </button>
-        )}
-        {results.isPassed && (
+        ) : (
           <button
             onClick={onContinue}
             className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-indigo-500 transition duration-200"
