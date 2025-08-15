@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Course, Lesson } from '../types';
 import { CurriculumSidebar } from './CurriculumSidebar';
@@ -16,6 +17,7 @@ interface CourseDisplayProps {
   error: string | null;
   onSelectLesson: (lesson: Lesson) => void;
   unlockedModules: Set<number>;
+  completedLessons: Set<string>;
   shouldShowStartQuiz: boolean;
   onStartQuiz: () => void;
   isGeneratingQuiz: boolean;
@@ -30,9 +32,10 @@ export const CourseDisplay: React.FC<CourseDisplayProps> = ({
   error,
   onSelectLesson,
   unlockedModules,
+  completedLessons,
   shouldShowStartQuiz,
   onStartQuiz,
-  isGeneratingQuiz
+  isGeneratingQuiz,
 }) => {
   return (
     <div className="flex flex-col lg:flex-row gap-8">
@@ -46,6 +49,7 @@ export const CourseDisplay: React.FC<CourseDisplayProps> = ({
             onSelectLesson={onSelectLesson}
             isGeneratingLesson={isLoadingLesson}
             unlockedModules={unlockedModules}
+            completedLessons={completedLessons}
           />
         ) : null}
       </aside>
@@ -59,7 +63,7 @@ export const CourseDisplay: React.FC<CourseDisplayProps> = ({
         )}
         {isLoadingLesson ? (
           <LessonSkeleton />
-        ) : lessonContent ? (
+        ) : lessonContent && selectedLesson ? (
           <LessonContent
              content={lessonContent}
              showStartQuizButton={shouldShowStartQuiz}

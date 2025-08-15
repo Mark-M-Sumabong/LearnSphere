@@ -1,4 +1,5 @@
 
+
 import { Course, LeaderboardEntry, SkillLevel, AssessmentResult, AppState, ProfileWithId, QuizAttempt } from '../types';
 import { getSupabaseClient } from './supabaseClient';
 import { Json } from './supabaseClient';
@@ -18,7 +19,7 @@ const createNewCourseViaRpc = async (course: Course): Promise<number | null> => 
     // alphabetically sorted, matching the signature of the corrected database function,
     // which prevents errors from the client library reordering them.
     const { data, error } = await supabase.rpc('create_course_and_get_id', {
-        p_course_data: course,
+        p_course_data: course as unknown as Json,
         p_course_title: course.title,
     });
 
@@ -28,7 +29,7 @@ const createNewCourseViaRpc = async (course: Course): Promise<number | null> => 
         throw new Error(`Database operation failed. Ensure the 'create_course_and_get_id(p_course_data jsonb, p_course_title text)' RPC function is correctly set up in your Supabase project. Original error: ${error.message}`);
     }
 
-    return data;
+    return data as unknown as number | null;
 }
 
 
@@ -85,12 +86,13 @@ export const saveUserState = async (userId: string, state: AppState): Promise<vo
         user_id: userId,
         course_id: courseId,
         unlocked_modules: state.unlockedModules,
+        completed_lessons: state.completedLessons,
         skill_level: state.skillLevel,
         last_updated_at: new Date().toISOString()
     };
     const { error } = await supabase
         .from('user_progress')
-        .upsert(progressToUpsert as any, { onConflict: 'user_id, course_id' });
+        .upsert([progressToUpsert] as any, { onConflict: 'user_id, course_id' });
     
     if (error) {
         console.error("Error saving user state:", error);
@@ -101,7 +103,7 @@ export const loadUserState = async (userId: string): Promise<AppState | null> =>
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
         .from('user_progress')
-        .select('course_id, unlocked_modules, skill_level, courses ( course_data )')
+        .select('course_id, unlocked_modules, completed_lessons, skill_level, courses!user_progress_course_id_fkey(course_data)')
         .eq('user_id', userId)
         .order('last_updated_at', { ascending: false })
         .limit(1)
@@ -115,15 +117,15 @@ export const loadUserState = async (userId: string): Promise<AppState | null> =>
         return null;
     }
     
-    const anyData = data as any;
-    const coursesData = anyData.courses;
+    const typedData = data as any;
+    const coursesData = typedData.courses;
 
     if (!coursesData || Array.isArray(coursesData)) {
         console.error("User progress found, but the associated course is missing or invalid.");
         return null;
     }
 
-    const courseData = coursesData.course_data as Course;
+    const courseData = coursesData.course_data as unknown as Course;
 
     // Additional validation to ensure course_data is a valid course object
     if (!courseData || typeof courseData.title !== 'string' || !Array.isArray(courseData.modules)) {
@@ -132,9 +134,10 @@ export const loadUserState = async (userId: string): Promise<AppState | null> =>
     }
 
     return {
-        course: { ...(courseData), id: anyData.course_id },
-        unlockedModules: anyData.unlocked_modules as number[],
-        skillLevel: anyData.skill_level as SkillLevel | null
+        course: { ...courseData, id: typedData.course_id },
+        unlockedModules: typedData.unlocked_modules,
+        completedLessons: typedData.completed_lessons || [],
+        skillLevel: typedData.skill_level,
     };
 };
 
@@ -144,7 +147,7 @@ export const getLeaderboard = async (courseId: number): Promise<LeaderboardEntry
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
         .from('leaderboard')
-        .select('score, timestamp, profiles(username)')
+        .select('score, timestamp, profiles!leaderboard_user_id_fkey(username)')
         .eq('course_id', courseId)
         .order('score', { ascending: false })
         .order('timestamp', { ascending: true });
@@ -158,44 +161,55 @@ export const getLeaderboard = async (courseId: number): Promise<LeaderboardEntry
         return [];
     }
 
-    return data.map(entry => {
-        const anyEntry = entry as any;
+    return (data as any[]).map(entry => {
         return {
-            username: anyEntry.profiles?.username || 'Anonymous',
-            score: anyEntry.score,
-            timestamp: new Date(anyEntry.timestamp).getTime()
+            username: entry.profiles?.username || 'Anonymous',
+            score: entry.score,
+            timestamp: new Date(entry.timestamp).getTime()
         }
     });
 };
 
-export const addLeaderboardEntry = async (courseId: number, userId: string, score: number): Promise<void> => {
+export const addLeaderboardEntry = async (courseId: number, userId: string): Promise<void> => {
     const supabase = getSupabaseClient();
 
-    // First, get the current score to ensure we only update if the new score is higher
-    const { data: existingEntry } = await supabase
-        .from('leaderboard')
+    // First, fetch all passed quiz attempts for this user and course to calculate an average score.
+    const { data: attempts, error: attemptsError } = await supabase
+        .from('quiz_attempts')
         .select('score')
         .eq('user_id', userId)
         .eq('course_id', courseId)
-        .maybeSingle();
+        .eq('passed', true);
 
-    // Only upsert if there's no existing entry or the new score is an improvement
-    if (!existingEntry || score > (existingEntry as any).score) {
-        const entryToUpsert = {
-            course_id: courseId,
-            user_id: userId,
-            score,
-            timestamp: new Date().toISOString()
-        };
-        const { error: upsertError } = await supabase
-            .from('leaderboard')
-            .upsert(entryToUpsert as any, {
-                onConflict: 'user_id, course_id',
-            });
+    if (attemptsError) {
+        console.error("Error fetching quiz attempts for leaderboard update:", attemptsError);
+        return;
+    }
+    
+    const typedAttempts = attempts as any[];
+    if (!typedAttempts || typedAttempts.length === 0) {
+        return; // No passed quizzes, so no entry on the leaderboard.
+    }
 
-        if (upsertError) {
-            console.error("Error adding leaderboard entry:", upsertError);
-        }
+    // Calculate the new average score.
+    const totalScore = typedAttempts.reduce((sum, attempt) => sum + attempt.score, 0);
+    const averageScore = totalScore / typedAttempts.length;
+
+    const entryToUpsert = {
+        course_id: courseId,
+        user_id: userId,
+        score: averageScore,
+        timestamp: new Date().toISOString()
+    };
+
+    const { error: upsertError } = await supabase
+        .from('leaderboard')
+        .upsert([entryToUpsert] as any, {
+            onConflict: 'user_id, course_id',
+        });
+
+    if (upsertError) {
+        console.error("Error adding leaderboard entry:", upsertError);
     }
 };
 
@@ -203,13 +217,13 @@ export const addLeaderboardEntry = async (courseId: number, userId: string, scor
 
 export const saveQuizAttempt = async (data: { userId: string, courseId: number, moduleTitle: string, score: number, passed: boolean }): Promise<void> => {
     const supabase = getSupabaseClient();
-    const { error } = await supabase.from('quiz_attempts').insert({
+    const { error } = await supabase.from('quiz_attempts').insert([{
         user_id: data.userId,
         course_id: data.courseId,
         module_title: data.moduleTitle,
         score: data.score,
         passed: data.passed,
-    } as any);
+    }] as any);
     if (error) {
         console.error("Error saving quiz attempt:", error);
     }
@@ -219,7 +233,7 @@ export const getAllAssessmentResults = async (): Promise<AssessmentResult[]> => 
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
         .from('assessments')
-        .select('topic, score, skill_level, created_at, profiles(username)')
+        .select('topic, score, skill_level, created_at, profiles!assessments_user_id_fkey(username)')
         .order('created_at', { ascending: false });
 
     if (error) {
@@ -231,14 +245,13 @@ export const getAllAssessmentResults = async (): Promise<AssessmentResult[]> => 
         return [];
     }
     
-    return data.map(result => {
-        const anyResult = result as any;
+    return (data as any[]).map(result => {
         return {
-            username: anyResult.profiles?.username || 'Anonymous',
-            topic: anyResult.topic,
-            score: anyResult.score,
-            skillLevel: anyResult.skill_level as SkillLevel,
-            timestamp: new Date(anyResult.created_at).getTime()
+            username: result.profiles?.username || 'Anonymous',
+            topic: result.topic,
+            score: result.score,
+            skillLevel: result.skill_level as SkillLevel,
+            timestamp: new Date(result.created_at).getTime()
         }
     });
 };
@@ -257,13 +270,12 @@ export const getUserAssessmentResults = async (userId: string): Promise<Omit<Ass
         return [];
     }
     
-    return (data || []).map(result => {
-        const anyResult = result as any;
+    return ((data as any[]) || []).map(result => {
         return {
-            topic: anyResult.topic,
-            score: anyResult.score,
-            skillLevel: anyResult.skill_level as SkillLevel,
-            timestamp: new Date(anyResult.created_at).getTime()
+            topic: result.topic,
+            score: result.score,
+            skillLevel: result.skill_level as SkillLevel,
+            timestamp: new Date(result.created_at).getTime()
         }
     });
 };
@@ -281,7 +293,7 @@ export const getUserQuizAttempts = async (userId: string): Promise<QuizAttempt[]
         return [];
     }
 
-    return (data as any) || [];
+    return (data as unknown as QuizAttempt[]) || [];
 };
 
 export const saveAssessmentResult = async (userId: string, result: Omit<AssessmentResult, 'username' | 'timestamp'>): Promise<void> => {
@@ -294,7 +306,7 @@ export const saveAssessmentResult = async (userId: string, result: Omit<Assessme
     };
     const { error } = await supabase
         .from('assessments')
-        .insert(assessmentToInsert as any);
+        .insert([assessmentToInsert] as any);
 
     if (error) {
         console.error("Error saving assessment result:", error);
@@ -321,11 +333,11 @@ export const importCourseToDb = async (course: Course): Promise<Course | null> =
     const supabase = getSupabaseClient();
     const courseToInsert = {
          title: course.title, 
-         course_data: course
+         course_data: course as unknown as Json
     };
     const { data, error } = await supabase
         .from('courses')
-        .insert(courseToInsert as any)
+        .insert([courseToInsert] as any)
         .select()
         .single();
         
@@ -334,8 +346,8 @@ export const importCourseToDb = async (course: Course): Promise<Course | null> =
         return null;
     }
     
-    const anyData = data as any;
-    return { ...(anyData.course_data as Course), id: anyData.id };
+    const typedData = data as any;
+    return { ...(typedData.course_data as unknown as Course), id: typedData.id };
 }
 
 export const getAllCoursesForAdmin = async (): Promise<{ title: string; id: number }[]> => {
@@ -361,5 +373,5 @@ export const getLeaderboardForAdmin = async (courseId: number): Promise<{ title:
     }
     
     const entries = await getLeaderboard(courseId);
-    return { title: (data as any).title, entries };
+    return { title: data.title, entries };
 }

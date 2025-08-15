@@ -1,8 +1,15 @@
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { SkillLevel } from '../types';
 
-export type Json = any;
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { Course, SkillLevel } from '../types';
+
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
 
 export type Database = {
   public: {
@@ -36,7 +43,7 @@ export type Database = {
           {
             foreignKeyName: "assessments_user_id_fkey"
             columns: ["user_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           }
@@ -86,14 +93,14 @@ export type Database = {
           {
             foreignKeyName: "leaderboard_course_id_fkey"
             columns: ["course_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "courses"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "leaderboard_user_id_fkey"
             columns: ["user_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           }
@@ -152,14 +159,14 @@ export type Database = {
           {
             foreignKeyName: "quiz_attempts_course_id_fkey"
             columns: ["course_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "courses"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "quiz_attempts_user_id_fkey"
             columns: ["user_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           }
@@ -168,37 +175,40 @@ export type Database = {
       user_progress: {
         Row: {
           course_id: number
+          completed_lessons: string[] | null
           last_updated_at: string
           skill_level: SkillLevel | null
-          unlocked_modules: Json
+          unlocked_modules: number[]
           user_id: string
         }
         Insert: {
           course_id: number
+          completed_lessons?: string[] | null
           last_updated_at?: string
           skill_level?: SkillLevel | null
-          unlocked_modules: Json
+          unlocked_modules: number[]
           user_id: string
         }
         Update: {
           course_id?: number
+          completed_lessons?: string[] | null
           last_updated_at?: string
           skill_level?: SkillLevel | null
-          unlocked_modules?: Json
+          unlocked_modules?: number[]
           user_id?: string
         }
         Relationships: [
           {
             foreignKeyName: "user_progress_course_id_fkey"
             columns: ["course_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "courses"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "user_progress_user_id_fkey"
             columns: ["user_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           }

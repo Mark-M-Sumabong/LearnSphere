@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { CliSandbox } from './CliSandbox';
 import { ArrowRightIcon } from './icons/ArrowRightIcon';
@@ -65,17 +66,21 @@ export const LessonContent: React.FC<LessonContentProps> = ({ content, showStart
   return (
     <article className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 md:p-8">
       {renderContent()}
-      {showStartQuizButton && (
-        <div className="mt-8 pt-6 border-t border-gray-700 text-center">
-            <h3 className="text-xl font-bold text-white">Ready to test your knowledge?</h3>
-            <p className="text-gray-400 mt-2 mb-4">You've completed the last lesson of this module. Take the quiz to unlock the next module.</p>
-            <button
-                onClick={onStartQuiz}
-                disabled={isGeneratingQuiz}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-indigo-500 disabled:bg-indigo-400 disabled:cursor-not-allowed transition duration-200"
-            >
-                {isGeneratingQuiz ? <><Spinner className="w-5 h-5" /> Generating Quiz...</> : <>Start Quiz <ArrowRightIcon className="w-5 h-5" /></>}
-            </button>
+      
+      {/* Footer for actions */}
+       {showStartQuizButton && (
+        <div className="mt-8 pt-6 border-t border-gray-700">
+            <div className="text-center pt-6">
+                <h3 className="text-xl font-bold text-white">Ready to test your knowledge?</h3>
+                <p className="text-gray-400 mt-2 mb-4">You've completed the last lesson of this module. Take the quiz to unlock the next module.</p>
+                <button
+                    onClick={onStartQuiz}
+                    disabled={isGeneratingQuiz}
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-indigo-500 disabled:bg-indigo-400 disabled:cursor-not-allowed transition duration-200"
+                >
+                    {isGeneratingQuiz ? <><Spinner className="w-5 h-5" /> Generating Quiz...</> : <>Start Quiz <ArrowRightIcon className="w-5 h-5" /></>}
+                </button>
+            </div>
         </div>
       )}
     </article>
